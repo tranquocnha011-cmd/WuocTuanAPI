@@ -9,7 +9,7 @@ let latestCaptchaData = null;
 
 app.post('/api/receive-captcha', (req, res) => {
     latestCaptchaData = req.body;
-    res.json({ status: 'success', message: 'Đã nhận dữ liệu!' });
+    res.json({ status: 'success', message: 'Đã nhận dữ liệu thành công!' });
 });
 
 app.get('/api/get-latest', (req, res) => {
@@ -24,56 +24,44 @@ app.get('/', (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Host Hiển Thị UI qCaptcha</title>
+        <script src="https://api.103-141-140-153.sslip.io/api.js" async defer></script>
         <style>
-            body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; text-align: center; }
-            .card { background: #fff; max-width: 500px; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-            #captcha-display { margin-top: 15px; border: 2px dashed #007bff; min-height: 350px; display: flex; justify-content: center; align-items: center; border-radius: 6px; }
+            body { font-family: Arial, sans-serif; background: #1a1a1a; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+            .status-bar { margin-bottom: 15px; text-align: center; font-size: 14px; color: #aaa; }
+            #wrapper { position: relative; width: 100%; max-width: 450px; display: flex; justify-content: center; }
         </style>
     </head>
     <body>
-        <div class="card">
+        <div class="status-bar">
             <h2>Giao diện qCaptcha Real-time</h2>
-            <p id="source-info">Đang tải dữ liệu từ trang gốc...</p>
-            <div id="captcha-display">Chưa có dữ liệu</div>
+            <p id="source-info">Đang chờ dữ liệu từ trang gốc...</p>
         </div>
+
+        <div id="wrapper">Chưa có dữ liệu</div>
 
         <script>
             const SITEKEY = 'd0c97bcc-d88c-42d1-8a0c-1180bf53e2a1';
-            const SCRIPT_URL = 'https://api.103-141-140-153.sslip.io/api.js';
             let currentHtml = '';
-            let isScriptLoaded = false;
 
-            // Hàm chủ động nạp Script Captcha
-            function loadCaptchaScript(callback) {
-                if (window.hcaptcha || window.qcaptcha) {
-                    isScriptLoaded = true;
-                    callback();
-                    return;
-                }
-                const script = document.createElement('script');
-                script.src = SCRIPT_URL;
-                script.async = true;
-                script.defer = true;
-                script.onload = () => {
-                    isScriptLoaded = true;
-                    callback();
-                };
-                document.head.appendChild(script);
-            }
-
-            function renderCaptchaInsideContainer(container) {
+            function renderWidgetIfPresent() {
                 const api = window.hcaptcha || window.qcaptcha;
-                if (api && typeof api.render === 'function') {
-                    try {
-                        container.innerHTML = ''; // Làm sạch ô trống
-                        api.render(container, {
-                            sitekey: SITEKEY,
-                            callback: function(token) {
-                                console.log('Token thu được:', token);
-                            }
-                        });
-                    } catch (e) {
-                        console.error('Lỗi khi render qCaptcha:', e);
+                const container = document.getElementById('qcaptcha-container');
+                
+                if (container && api && typeof api.render === 'function') {
+                    // Kiểm tra nếu chưa render thì mới render
+                    if (!container.hasChildNodes()) {
+                        try {
+                            api.render('qcaptcha-container', {
+                                sitekey: SITEKEY,
+                                callback: function(token) {
+                                    console.log('Token thu được:', token);
+                                    const tokenArea = document.getElementById('qcaptcha-token');
+                                    if(tokenArea) tokenArea.value = '/qcaptcha ' + token;
+                                }
+                            });
+                        } catch (e) {
+                            console.warn('Render retry:', e);
+                        }
                     }
                 }
             }
@@ -85,25 +73,32 @@ app.get('/', (req, res) => {
 
                     if (data && data.htmlContent && data.htmlContent !== currentHtml) {
                         currentHtml = data.htmlContent;
-                        document.getElementById('source-info').innerText = 'Đang hiển thị Captcha từ: ' + data.siteUrl;
+                        document.getElementById('source-info').innerText = 'Nguồn: ' + data.siteUrl;
                         
-                        const displayArea = document.getElementById('captcha-display');
-                        displayArea.innerHTML = data.htmlContent;
+                        const wrapper = document.getElementById('wrapper');
+                        wrapper.innerHTML = data.htmlContent;
 
-                        // Tìm đúng vùng chứa captcha để nạp widget
-                        const container = displayArea.querySelector('#qcaptcha-container');
-                        if (container) {
-                            loadCaptchaScript(() => {
-                                setTimeout(() => renderCaptchaInsideContainer(container), 300);
-                            });
+                        // Đảm bảo modal hiển thị dạng tương đối trên Host
+                        const modal = wrapper.querySelector('#qcaptcha-modal');
+                        if (modal) {
+                            modal.style.position = 'relative';
+                            modal.style.top = '0';
+                            modal.style.left = '0';
+                            modal.style.width = '100%';
+                            modal.style.height = 'auto';
+                            modal.style.background = 'transparent';
                         }
+
+                        // Gọi render captcha sau khi dán HTML
+                        setTimeout(renderWidgetIfPresent, 300);
+                        setTimeout(renderWidgetIfPresent, 1000);
                     }
                 } catch (e) {
                     console.error('Lỗi khi tải UI:', e);
                 }
             }
 
-            setInterval(fetchUI, 1500);
+            setInterval(fetchUI, 1000);
             fetchUI();
         </script>
     </body>
@@ -112,4 +107,4 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server đang chạy trên port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
