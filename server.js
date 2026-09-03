@@ -5,15 +5,15 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(cors({ origin: '*' }));
 
-let latestCaptchaData = null;
+let latestData = null;
 
 app.post('/api/receive-captcha', (req, res) => {
-    latestCaptchaData = req.body;
-    res.json({ status: 'success', message: 'Đã nhận dữ liệu!' });
+    latestData = req.body;
+    res.json({ status: 'success' });
 });
 
 app.get('/api/get-latest', (req, res) => {
-    res.json(latestCaptchaData || { message: 'Chưa có dữ liệu' });
+    res.json(latestData || { message: 'Chưa có dữ liệu token' });
 });
 
 app.get('/', (req, res) => {
@@ -22,72 +22,31 @@ app.get('/', (req, res) => {
     <html lang="vi">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Host Hiển Thị UI qCaptcha Realtime</title>
-        <!-- Nạp SDK qCaptcha trực tiếp trên Host -->
-        <script src="https://api.103-141-140-153.sslip.io/api.js" async defer></script>
+        <title>Nhận Token qCaptcha</title>
         <style>
-            body { font-family: Arial, sans-serif; background: #121212; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-            .card { background: #1e1e1e; border-radius: 12px; padding: 20px; text-align: center; max-width: 450px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-            #render-area { margin-top: 15px; }
+            body { font-family: Arial; background: #121212; color: #fff; padding: 20px; text-align: center; }
+            .box { background: #1e1e1e; padding: 20px; border-radius: 8px; max-width: 400px; margin: 0 auto; }
+            textarea { width: 100%; height: 80px; background: #2d2d2d; color: #0f0; border: 1px solid #444; padding: 8px; border-radius: 4px; }
         </style>
     </head>
     <body>
-        <div class="card">
-            <h2>Giao diện qCaptcha Real-time</h2>
-            <p id="info">Đang chờ dữ liệu từ trang gốc...</p>
-            <div id="render-area">Đang tải khung xác thực...</div>
+        <div class="box">
+            <h2>Trạm Nhận Token qCaptcha</h2>
+            <p id="status">Đang chờ bạn giải captcha bên trang gốc...</p>
+            <textarea id="token-box" readonly placeholder="Token sẽ xuất hiện ở đây..."></textarea>
         </div>
-
         <script>
-            const SITEKEY = 'd0c97bcc-d88c-42d1-8a0c-1180bf53e2a1';
-            let lastTimestamp = '';
-
-            async function syncCaptchaUI() {
+            async function checkToken() {
                 try {
-                    const res = await fetch('/api/get-latest');
-                    const data = await res.json();
-
-                    if (data && data.htmlContent && data.timestamp !== lastTimestamp) {
-                        lastTimestamp = data.timestamp;
-                        document.getElementById('info').innerText = 'Nguồn: ' + data.siteUrl;
-
-                        const renderArea = document.getElementById('render-area');
-                        renderArea.innerHTML = data.htmlContent;
-
-                        // Đợi SDK qCaptcha sẵn sàng rồi render vào container
-                        let checkInterval = setInterval(() => {
-                            const api = window.hcaptcha || window.qcaptcha;
-                            const container = document.getElementById('qcaptcha-container');
-                            
-                            if (api && typeof api.render === 'function' && container) {
-                                clearInterval(checkInterval);
-                                try {
-                                    container.innerHTML = ''; // Xóa sạch lỗi cũ nếu có
-                                    api.render(container, {
-                                        sitekey: SITEKEY,
-                                        callback: function(token) {
-                                            console.log('Token thành công:', token);
-                                            const tokenArea = document.getElementById('qcaptcha-token');
-                                            if(tokenArea) {
-                                                tokenArea.value = '/qcaptcha ' + token;
-                                                tokenArea.style.display = 'block';
-                                            }
-                                        }
-                                    });
-                                } catch (err) {
-                                    console.error('Lỗi khi gọi api.render:', err);
-                                }
-                            }
-                        }, 300);
+                    let res = await fetch('/api/get-latest');
+                    let data = await res.json();
+                    if(data && data.token) {
+                        document.getElementById('token-box').value = data.token;
+                        document.getElementById('status').innerText = 'Đã nhận Token thành công lúc: ' + new Date(data.timestamp).toLocaleTimeString();
                     }
-                } catch (e) {
-                    console.error('Lỗi đồng bộ:', e);
-                }
+                } catch(e) {}
             }
-
-            setInterval(syncCaptchaUI, 1500);
-            syncCaptchaUI();
+            setInterval(checkToken, 1000);
         </script>
     </body>
     </html>
@@ -95,4 +54,4 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT);
