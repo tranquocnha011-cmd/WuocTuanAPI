@@ -9,7 +9,7 @@ let latestCaptchaData = null;
 
 app.post('/api/receive-captcha', (req, res) => {
     latestCaptchaData = req.body;
-    res.json({ status: 'success', message: 'Đã nhận dữ liệu thành công!' });
+    res.json({ status: 'success', message: 'Đã nhận ảnh!' });
 });
 
 app.get('/api/get-latest', (req, res) => {
@@ -23,83 +23,46 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Host Hiển Thị UI qCaptcha</title>
-        <script src="https://api.103-141-140-153.sslip.io/api.js" async defer></script>
+        <title>Host Hiển Thị UI qCaptcha Realtime</title>
         <style>
-            body { font-family: Arial, sans-serif; background: #1a1a1a; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-            .status-bar { margin-bottom: 15px; text-align: center; font-size: 14px; color: #aaa; }
-            #wrapper { position: relative; width: 100%; max-width: 450px; display: flex; justify-content: center; }
+            body { font-family: Arial, sans-serif; background: #181818; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+            .card { background: #222; border-radius: 12px; padding: 20px; text-align: center; max-width: 450px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+            #img-container { margin-top: 15px; border: 2px dashed #007bff; border-radius: 8px; min-height: 250px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+            #captcha-img { max-width: 100%; height: auto; display: none; border-radius: 6px; }
         </style>
     </head>
     <body>
-        <div class="status-bar">
+        <div class="card">
             <h2>Giao diện qCaptcha Real-time</h2>
-            <p id="source-info">Đang chờ dữ liệu từ trang gốc...</p>
+            <p id="info">Đang chờ dữ liệu...</p>
+            <div id="img-container">
+                <span id="loading-text">Chưa có ảnh Captcha</span>
+                <img id="captcha-img" src="" alt="qCaptcha Live" />
+            </div>
         </div>
 
-        <div id="wrapper">Chưa có dữ liệu</div>
-
         <script>
-            const SITEKEY = 'd0c97bcc-d88c-42d1-8a0c-1180bf53e2a1';
-            let currentHtml = '';
-
-            function renderWidgetIfPresent() {
-                const api = window.hcaptcha || window.qcaptcha;
-                const container = document.getElementById('qcaptcha-container');
-                
-                if (container && api && typeof api.render === 'function') {
-                    // Kiểm tra nếu chưa render thì mới render
-                    if (!container.hasChildNodes()) {
-                        try {
-                            api.render('qcaptcha-container', {
-                                sitekey: SITEKEY,
-                                callback: function(token) {
-                                    console.log('Token thu được:', token);
-                                    const tokenArea = document.getElementById('qcaptcha-token');
-                                    if(tokenArea) tokenArea.value = '/qcaptcha ' + token;
-                                }
-                            });
-                        } catch (e) {
-                            console.warn('Render retry:', e);
-                        }
-                    }
-                }
-            }
-
-            async function fetchUI() {
+            let lastTimestamp = '';
+            async function fetchCaptcha() {
                 try {
                     const res = await fetch('/api/get-latest');
                     const data = await res.json();
 
-                    if (data && data.htmlContent && data.htmlContent !== currentHtml) {
-                        currentHtml = data.htmlContent;
-                        document.getElementById('source-info').innerText = 'Nguồn: ' + data.siteUrl;
-                        
-                        const wrapper = document.getElementById('wrapper');
-                        wrapper.innerHTML = data.htmlContent;
-
-                        // Đảm bảo modal hiển thị dạng tương đối trên Host
-                        const modal = wrapper.querySelector('#qcaptcha-modal');
-                        if (modal) {
-                            modal.style.position = 'relative';
-                            modal.style.top = '0';
-                            modal.style.left = '0';
-                            modal.style.width = '100%';
-                            modal.style.height = 'auto';
-                            modal.style.background = 'transparent';
-                        }
-
-                        // Gọi render captcha sau khi dán HTML
-                        setTimeout(renderWidgetIfPresent, 300);
-                        setTimeout(renderWidgetIfPresent, 1000);
+                    if (data && data.image && data.timestamp !== lastTimestamp) {
+                        lastTimestamp = data.timestamp;
+                        document.getElementById('info').innerText = 'Nguồn: ' + data.siteUrl + ' (' + new Date(data.timestamp).toLocaleTimeString() + ')';
+                        const img = document.getElementById('captcha-img');
+                        img.src = data.image;
+                        img.style.display = 'block';
+                        document.getElementById('loading-text').style.display = 'none';
                     }
                 } catch (e) {
-                    console.error('Lỗi khi tải UI:', e);
+                    console.error('Lỗi tải captcha:', e);
                 }
             }
 
-            setInterval(fetchUI, 1000);
-            fetchUI();
+            setInterval(fetchCaptcha, 1000);
+            fetchCaptcha();
         </script>
     </body>
     </html>
