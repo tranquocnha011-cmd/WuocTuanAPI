@@ -9,7 +9,7 @@ let latestCaptchaData = null;
 
 app.post('/api/receive-captcha', (req, res) => {
     latestCaptchaData = req.body;
-    res.json({ status: 'success', message: 'Đã nhận dữ liệu thành công!' });
+    res.json({ status: 'success', message: 'Đã nhận dữ liệu!' });
 });
 
 app.get('/api/get-latest', (req, res) => {
@@ -24,23 +24,26 @@ app.get('/', (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Host Hiển Thị UI qCaptcha Realtime</title>
+        <!-- Nạp SDK qCaptcha trực tiếp trên Host -->
+        <script src="https://api.103-141-140-153.sslip.io/api.js" async defer></script>
         <style>
             body { font-family: Arial, sans-serif; background: #121212; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
             .card { background: #1e1e1e; border-radius: 12px; padding: 20px; text-align: center; max-width: 450px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-            #display-area { margin-top: 15px; display: flex; justify-content: center; }
+            #render-area { margin-top: 15px; }
         </style>
     </head>
     <body>
         <div class="card">
             <h2>Giao diện qCaptcha Real-time</h2>
             <p id="info">Đang chờ dữ liệu từ trang gốc...</p>
-            <div id="display-area">Chưa có dữ liệu</div>
+            <div id="render-area">Đang tải khung xác thực...</div>
         </div>
 
         <script>
+            const SITEKEY = 'd0c97bcc-d88c-42d1-8a0c-1180bf53e2a1';
             let lastTimestamp = '';
 
-            async function fetchUI() {
+            async function syncCaptchaUI() {
                 try {
                     const res = await fetch('/api/get-latest');
                     const data = await res.json();
@@ -48,41 +51,43 @@ app.get('/', (req, res) => {
                     if (data && data.htmlContent && data.timestamp !== lastTimestamp) {
                         lastTimestamp = data.timestamp;
                         document.getElementById('info').innerText = 'Nguồn: ' + data.siteUrl;
-                        
-                        const displayArea = document.getElementById('display-area');
-                        
-                        // Parse HTML nhận được
-                        let parser = new DOMParser();
-                        let doc = parser.parseFromString(data.htmlContent, 'text/html');
-                        
-                        // Tự động sửa lại domain trong iframe sang domain của Host hiện tại
-                        let iframe = doc.querySelector('iframe');
-                        if (iframe && iframe.src) {
-                            try {
-                                let urlObj = new URL(iframe.src);
-                                let hashContent = decodeURIComponent(urlObj.hash);
-                                if (hashContent.includes('sunwinvv.com')) {
-                                    // Thay thế host trong JSON ngầm của iframe thành host hiện tại
-                                    hashContent = hashContent.replace('https://sunwinvv.com', window.location.origin);
-                                    urlObj.hash = encodeURIComponent(hashContent).replace(/%2C/g, ',');
-                                    iframe.src = urlObj.toString();
-                                }
-                            } catch (err) {
-                                console.error('Lỗi xử lý iframe src:', err);
-                            }
-                        }
 
-                        // Hiển thị nội dung đã được vá lỗi lên Host
-                        displayArea.innerHTML = '';
-                        displayArea.appendChild(doc.body.firstChild);
+                        const renderArea = document.getElementById('render-area');
+                        renderArea.innerHTML = data.htmlContent;
+
+                        // Đợi SDK qCaptcha sẵn sàng rồi render vào container
+                        let checkInterval = setInterval(() => {
+                            const api = window.hcaptcha || window.qcaptcha;
+                            const container = document.getElementById('qcaptcha-container');
+                            
+                            if (api && typeof api.render === 'function' && container) {
+                                clearInterval(checkInterval);
+                                try {
+                                    container.innerHTML = ''; // Xóa sạch lỗi cũ nếu có
+                                    api.render(container, {
+                                        sitekey: SITEKEY,
+                                        callback: function(token) {
+                                            console.log('Token thành công:', token);
+                                            const tokenArea = document.getElementById('qcaptcha-token');
+                                            if(tokenArea) {
+                                                tokenArea.value = '/qcaptcha ' + token;
+                                                tokenArea.style.display = 'block';
+                                            }
+                                        }
+                                    });
+                                } catch (err) {
+                                    console.error('Lỗi khi gọi api.render:', err);
+                                }
+                            }
+                        }, 300);
                     }
                 } catch (e) {
-                    console.error('Lỗi cập nhật giao diện:', e);
+                    console.error('Lỗi đồng bộ:', e);
                 }
             }
 
-            setInterval(fetchUI, 1000);
-            fetchUI();
+            setInterval(syncCaptchaUI, 1500);
+            syncCaptchaUI();
         </script>
     </body>
     </html>
