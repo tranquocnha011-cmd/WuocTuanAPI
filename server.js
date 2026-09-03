@@ -9,7 +9,7 @@ let latestCaptchaData = null;
 
 app.post('/api/receive-captcha', (req, res) => {
     latestCaptchaData = req.body;
-    res.json({ status: 'success', message: 'Đã nhận URL iframe!' });
+    res.json({ status: 'success', message: 'Đã nhận dữ liệu thành công!' });
 });
 
 app.get('/api/get-latest', (req, res) => {
@@ -27,52 +27,62 @@ app.get('/', (req, res) => {
         <style>
             body { font-family: Arial, sans-serif; background: #121212; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
             .card { background: #1e1e1e; border-radius: 12px; padding: 20px; text-align: center; max-width: 450px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-            .modal-box { background: #fff; border-radius: 8px; padding: 15px; color: #000; margin-top: 15px; }
-            iframe { border: none; width: 100%; height: 100px; }
-            button { width: 100%; padding: 10px; margin-top: 8px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; color: #fff; }
-            .btn-verify { background: #ffc107; color: #000; }
-            .btn-copy { background: #28a745; }
-            .btn-reload { background: #007bff; }
-            .btn-close { background: #6c757d; }
+            #display-area { margin-top: 15px; display: flex; justify-content: center; }
         </style>
     </head>
     <body>
         <div class="card">
             <h2>Giao diện qCaptcha Real-time</h2>
-            <p id="info">Đang chờ iframe từ trang gốc...</p>
-            
-            <div class="modal-box">
-                <h3>Xác thực qCaptcha</h3>
-                <div id="iframe-container">Đang tải widget...</div>
-                <button class="btn-verify">XÁC NHẬN</button>
-                <button class="btn-copy">COPY TOKEN</button>
-                <button class="btn-reload">RELOAD QCAPTCHA</button>
-                <button class="btn-close">ĐÓNG</button>
-            </div>
+            <p id="info">Đang chờ dữ liệu từ trang gốc...</p>
+            <div id="display-area">Chưa có dữ liệu</div>
         </div>
 
         <script>
-            let lastIframeUrl = '';
+            let lastTimestamp = '';
 
-            async function fetchIframe() {
+            async function fetchUI() {
                 try {
                     const res = await fetch('/api/get-latest');
                     const data = await res.json();
 
-                    if (data && data.iframeUrl && data.iframeUrl !== lastIframeUrl) {
-                        lastIframeUrl = data.iframeUrl;
+                    if (data && data.htmlContent && data.timestamp !== lastTimestamp) {
+                        lastTimestamp = data.timestamp;
                         document.getElementById('info').innerText = 'Nguồn: ' + data.siteUrl;
                         
-                        const container = document.getElementById('iframe-container');
-                        container.innerHTML = '<iframe src="' + data.iframeUrl + '" scrolling="no"></iframe>';
+                        const displayArea = document.getElementById('display-area');
+                        
+                        // Parse HTML nhận được
+                        let parser = new DOMParser();
+                        let doc = parser.parseFromString(data.htmlContent, 'text/html');
+                        
+                        // Tự động sửa lại domain trong iframe sang domain của Host hiện tại
+                        let iframe = doc.querySelector('iframe');
+                        if (iframe && iframe.src) {
+                            try {
+                                let urlObj = new URL(iframe.src);
+                                let hashContent = decodeURIComponent(urlObj.hash);
+                                if (hashContent.includes('sunwinvv.com')) {
+                                    // Thay thế host trong JSON ngầm của iframe thành host hiện tại
+                                    hashContent = hashContent.replace('https://sunwinvv.com', window.location.origin);
+                                    urlObj.hash = encodeURIComponent(hashContent).replace(/%2C/g, ',');
+                                    iframe.src = urlObj.toString();
+                                }
+                            } catch (err) {
+                                console.error('Lỗi xử lý iframe src:', err);
+                            }
+                        }
+
+                        // Hiển thị nội dung đã được vá lỗi lên Host
+                        displayArea.innerHTML = '';
+                        displayArea.appendChild(doc.body.firstChild);
                     }
                 } catch (e) {
-                    console.error('Lỗi nạp iframe:', e);
+                    console.error('Lỗi cập nhật giao diện:', e);
                 }
             }
 
-            setInterval(fetchIframe, 1000);
-            fetchIframe();
+            setInterval(fetchUI, 1000);
+            fetchUI();
         </script>
     </body>
     </html>
