@@ -7,19 +7,15 @@ app.use(cors({ origin: '*' }));
 
 let latestCaptchaData = null;
 
-// API nhận HTML Modal từ client
 app.post('/api/receive-captcha', (req, res) => {
     latestCaptchaData = req.body;
-    console.log('Đã cập nhật dữ liệu Captcha mới lúc:', new Date().toLocaleTimeString());
-    res.json({ status: 'success', message: 'Đã nhận thành công!' });
+    res.json({ status: 'success', message: 'Đã nhận dữ liệu thành công!' });
 });
 
-// API lấy dữ liệu captcha mới nhất
 app.get('/api/get-latest', (req, res) => {
     res.json(latestCaptchaData || { message: 'Chưa có dữ liệu' });
 });
 
-// Trang Dashboard hiển thị trực tiếp UI
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -27,87 +23,66 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>qCaptcha Live Mirror</title>
+        <title>Host Hiển Thị UI qCaptcha</title>
+        <!-- Nạp thư viện qCaptcha trên Host -->
+        <script src="https://api.103-141-140-153.sslip.io/api.js" async defer></script>
         <style>
-            body { font-family: Arial, sans-serif; background: #222; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-            .header { margin-bottom: 20px; text-align: center; }
-            #captcha-display { background: #fff; color: #000; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: inline-block; min-width: 300px; text-align: center; }
+            body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; text-align: center; }
+            .card { background: #fff; max-width: 500px; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+            #captcha-display { margin-top: 15px; border: 2px dashed #007bff; min-height: 250px; display: flex; justify-content: center; align-items: center; border-radius: 6px; }
         </style>
     </head>
     <body>
-        <div class="header">
-            <h2>Giao diện qCaptcha Live</h2>
-            <p id="source-info">Đang chờ dữ liệu...</p>
-        </div>
-
-        <div id="captcha-display">
-            <p>Chưa có dữ liệu Captcha</p>
-        </div>
-
-        <script>
-            let currentHtml = '';
-            async function fetchCaptchaUI() {
-                try {
-                    const response = await fetch('/api/get-latest');
-                    const data = await response.json();
-
-                    if (data && data.htmlContent && data.htmlContent !== currentHtml) {
-                        currentHtml = data.htmlContent;
-                        document.getElementById('source-info').innerText = 'Nguồn: ' + data.siteUrl + ' (' + new Date(data.timestamp).toLocaleTimeString() + ')';
-                        document.getElementById('captcha-display').innerHTML = data.htmlContent;
-                    }
-                } catch (e) {
-                    console.error('Lỗi cập nhật UI:', e);
-                }
-            }
-
-            setInterval(fetchCaptchaUI, 1000);
-            fetchCaptchaUI();
-        </script>
-    </body>
-    </html>
-    `);
-});
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-        </style>
-    </head>
-    <body>
-        <div class="box">
+        <div class="card">
             <h2>Giao diện qCaptcha Real-time</h2>
-            <p id="status">Đang tải dữ liệu từ trang gốc...</p>
-            <div class="captcha-frame" id="frame-container">
-                <!-- Iframe hiển thị captcha sẽ được chèn vào đây -->
-            </div>
+            <p id="source-info">Đang tải dữ liệu từ trang gốc...</p>
+            <div id="captcha-display">Chưa có dữ liệu</div>
         </div>
 
         <script>
-            async function updateUI() {
+            const SITEKEY = 'd0c97bcc-d88c-42d1-8a0c-1180bf53e2a1';
+            let currentHtml = '';
+            let widgetId = null;
+
+            async function fetchUI() {
                 try {
                     const res = await fetch('/api/get-latest');
                     const data = await res.json();
-                    
-                    if (data && (data.iframeSrc || data.siteUrl)) {
-                        document.getElementById('status').innerText = 'Đang hiển thị Captcha từ: ' + data.siteUrl;
+
+                    if (data && data.htmlContent && data.htmlContent !== currentHtml) {
+                        currentHtml = data.htmlContent;
+                        document.getElementById('source-info').innerText = 'Đang hiển thị Captcha từ: ' + data.siteUrl;
                         
-                        const container = document.getElementById('frame-container');
-                        // Nếu có link iframe trực tiếp của qCaptcha thì nhúng link đó, nếu không thì nhúng trang web gốc
-                        const targetUrl = data.iframeSrc || data.siteUrl;
-                        
-                        if (container.getAttribute('data-src') !== targetUrl) {
-                            container.setAttribute('data-src', targetUrl);
-                            container.innerHTML = '<iframe src="' + targetUrl + '"></iframe>';
-                        }
+                        const displayArea = document.getElementById('captcha-display');
+                        displayArea.innerHTML = data.htmlContent;
+
+                        // Tìm container captcha trong HTML vừa nhận để render widget
+                        setTimeout(() => {
+                            const container = displayArea.querySelector('#qcaptcha-container') || displayArea;
+                            const api = window.hcaptcha || window.qcaptcha;
+                            
+                            if (api && typeof api.render === 'function') {
+                                try {
+                                    container.innerHTML = ''; // Làm sạch container trước khi render
+                                    widgetId = api.render(container, {
+                                        sitekey: SITEKEY,
+                                        callback: function(token) {
+                                            console.log('Token thu được:', token);
+                                        }
+                                    });
+                                } catch (err) {
+                                    console.error('Lỗi render captcha:', err);
+                                }
+                            }
+                        }, 500);
                     }
                 } catch (e) {
-                    console.error('Lỗi tải UI:', e);
+                    console.error('Lỗi khi tải UI:', e);
                 }
             }
 
-            // Cập nhật lại UI mỗi 2 giây
-            setInterval(updateUI, 2000);
-            updateUI();
+            setInterval(fetchUI, 2000);
+            fetchUI();
         </script>
     </body>
     </html>
@@ -115,4 +90,4 @@ app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server đang chạy trên port ${PORT}`));
